@@ -6,7 +6,7 @@ Nikolai's [Claude Code](https://code.claude.com) plugin marketplace.
 
 ```text
 /plugin marketplace add NTillmann/claude-plugins
-/plugin install forge@claude-plugins
+/plugin install forge@ntillmann-plugins
 ```
 
 `/plugin marketplace update` pulls the latest after changes are pushed here.

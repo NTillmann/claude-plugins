@@ -1,0 +1,17 @@
+{
+  "name": "claude-plugins",
+  "owner": {
+    "name": "Nikolai Tillmann"
+  },
+  "metadata": {
+    "description": "Nikolai's Claude Code plugins."
+  },
+  "plugins": [
+    {
+      "name": "forge",
+      "source": "./plugins/forge",
+      "description": "Plan → implement → polish → ship a task end-to-end (autonomous, multi-repo), with a durable plan queue.",
+      "category": "workflow"
+    }
+  ]
+}

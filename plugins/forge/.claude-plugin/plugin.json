@@ -1,0 +1,8 @@
+{
+  "name": "forge",
+  "description": "Plan → implement → polish → ship a task end-to-end (autonomous, multi-repo), with a durable plan queue. Ships a driver command plus the orchestration workflow it runs by path.",
+  "author": {
+    "name": "Nikolai Tillmann",
+    "email": "nikolai_tillmann@hotmail.com"
+  }
+}

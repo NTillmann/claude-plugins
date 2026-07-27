@@ -89,13 +89,24 @@ Strip the leading `enqueue` token; the rest is the input. Determine `workspaceRo
 
 - Choose a unique stable `id` = the topic slug (e.g. `worker-telemetry`). **No `NNNN-` number prefix** for `.forge/tasks/` plans: numbers are required nowhere (the queue orders by array position + `dependsOn`, not by number), and topic slugs avoid the cross-session collisions sequential numbers cause. (The legacy `forge-api/plans/tasks/` tree keeps its numbers — they're cross-referenced there; this slug-only rule is for `.forge/tasks/`.) If a slug somehow collides with an existing id, suffix `-2`, `-3`, …
 - If `<workspaceRoot>/.forge/queue.json` does NOT exist, create it: `{"version":1,"workspaceRoot":"<abs>","items":[]}`.
-- **Re-read the file fresh**, `cp -f queue.json queue.json.bak`, then append with `jq` to a temp file + `mv -f` (the §Q7 discipline). The new item:
+- While drafting the plan, explicitly classify the task by its own nature; the runtime must never infer a class from task prose:
+  - `mechanical` — clearly repeatable, low-judgment, self-contained, cheap-to-redo work such as asset/logo generation, importing an already-verified and spot-checked corpus, or credential-rotation scripts.
+  - `routine` — ordinary, well-specified feature work following a documented pattern, such as scaffolding a thin consumer of an existing shared kit.
+  - Otherwise omit the class and retain the safe `critical` default. Always do this when unsure and for security, credentials, access control, novel architecture, cross-cutting refactors, generated customer-facing or legal prose, and algorithmic correctness.
+- **Primary path:** when `<workspaceRoot>/.forge/codex/forge_codex/cli.py` exists, use the real locked, journaled verb:
+  ```sh
+  cd <workspaceRoot>/.forge/codex && PYTHONPATH=. python3 -m forge_codex.cli \
+    enqueue <id> <planPath> --workspace <workspaceRoot> \
+    [--depends-on <dep> ...] [--execution-class routine|mechanical]
+  ```
+  Keep `--workspace` after the subcommand. Omit `--execution-class` for `critical`. The verb takes the queue lock, journals `queue.item.enqueued`, refuses duplicate ids, and writes `executionClass` natively. If it exits 2 with `queue item already exists`, apply the existing `-2`, `-3`, … suffix rule and retry with the new id. Do not use the `cp`/`jq`/`mv` path in a workspace with this checkout.
+- **Fallback path for generic workspaces only:** when `.forge/queue.json` exists but there is no `.forge/codex` checkout, **re-read the file fresh**, `cp -f queue.json queue.json.bak`, then append with `jq` to a temp file + `mv -f` (the §Q7 discipline). The new item:
   ```json
   { "id":"<id>", "planPath":"<path>", "status":"pending", "attempts":0,
     "maxAttempts":2, "dependsOn":[], "phaseReached":null, "taskId":null,
-    "result":{}, "failure":null }
+    "result":{}, "failure":null, "executionClass":<chosen value or null> }
   ```
-- **Only append.** Never touch any existing item's `status`/`phaseReached`/`taskId` — those belong to the drain driver (§Q1). After writing, **read back and confirm the pre-existing items are byte-identical** (clobber check); if they changed, restore from `.bak` and retry the append once.
+  A `null` fallback value uses the safe legacy `critical` route. **Only append.** Never touch any existing item's `status`/`phaseReached`/`taskId` — those belong to the drain driver (§Q1). After writing, **read back and confirm the pre-existing items are byte-identical** (clobber check); if they changed, restore from `.bak` and retry the append once.
 - `dependsOn` defaults to `[]` (independent — a failure elsewhere won't block it). Set prerequisites only if the user names them (must be existing ids).
 
 ## E3. STOP — do not execute

@@ -448,7 +448,9 @@ async function runBuildPhase(scenariosOverride) {
   phase('Checklist')
   // A hand-authored companion checklist is authoritative. Preserve it unless
   // executable validation below identifies a genuine defect.
-  const companionChecklistPath = planPath.replace(/\.md$/, '.checklist.md')
+  const companionChecklistPath = planPath.endsWith('.md')
+    ? `${planPath.slice(0, -3)}.checklist.md`
+    : `${planPath}.checklist.md`
   const checklist = await agent(
     `Read the converged plan at ${planPath}.\n\n` +
     `FIRST check whether a companion checklist exists at ${companionChecklistPath}. If it exists, transcribe its items into the schema ` +

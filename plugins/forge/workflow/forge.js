@@ -446,13 +446,25 @@ async function runBuildPhase(scenariosOverride) {
   const scenarios = await detectScenarios(scenariosOverride)
 
   phase('Checklist')
+  // A hand-authored companion checklist is authoritative. Preserve it unless
+  // executable validation below identifies a genuine defect.
+  const companionChecklistPath = planPath.replace(/\.md$/, '.checklist.md')
   const checklist = await agent(
-    `Read the converged plan at ${planPath}. Produce an ordered, atomic, verifiable implementation checklist. ` +
+    `Read the converged plan at ${planPath}.\n\n` +
+    `FIRST check whether a companion checklist exists at ${companionChecklistPath}. If it exists, transcribe its items into the schema ` +
+    `verbatim and in the same order. Do not paraphrase, merge, split, invent, or drop items during transcription, and do not rewrite it ` +
+    `unless the validation step below identifies a genuine defect.\n\n` +
+    `ONLY IF no companion exists: produce an ordered, atomic, verifiable implementation checklist from the plan and write the ` +
+    `human-readable copy to ${companionChecklistPath}.\n\n` +
     `Do not use whole-file exact grep occurrence counts as dependency or readiness checks; prefer behavioral, AST/schema-aware, ` +
     `or declaration-scoped checks. When required CI owns the full regression/lint/type-check gate, make exact-commit required-CI ` +
-    `verification the shipping criterion instead of requiring the same full suite locally. ` +
+    `verification the shipping criterion instead of requiring the same full suite locally.\n\n` +
+    `After the companion checklist exists, run the Forge checklist adviser from ${workspaceRoot}/.forge/codex ` +
+    `against ${companionChecklistPath}, passing --workspace ${workspaceRoot} --execute --json. Shell-quote every path safely. ` +
+    `Review advisories and findings. Correct structural defects and brittle or invalid preconditions; a failing acceptance check whose work is not implemented yet is expected. ` +
+    `If a precondition proves a genuinely missing required capability, preserve that accurate blocker. If you edit the checklist, transcribe the final corrected items into the schema.\n\n` +
     `Each item must name the absolute repo path it changes (under ${workspaceRoot}), the files, the change, and a concrete testable acceptance criterion. ` +
-    `Order items so dependencies come first. Also write a human-readable copy next to the plan as checklist.md.`,
+    `Order items so dependencies come first.`,
     { label: 'checklist', phase: 'Checklist', schema: CHECKLIST, model: 'sonnet' },
   )
   const items = (checklist && checklist.items) || []

@@ -43,6 +43,18 @@ Workflow({ scriptPath: FORGE_WF, args: { phase: 'plan', planPath, workspaceRoot 
 ```
 On return, post e.g.: `📋 Plan: converged in {planRounds} round(s){, or note if it hit the cap / aborted}. Starting build.`
 
+**Then validate the generated checklist before build:**
+```
+cd <workspaceRoot>/.forge/codex && PYTHONPATH=. python3 -m forge_codex.cli \
+  checklist-advise <workspaceRoot>/.forge/tasks/<slug>.checklist.md --execute --json
+```
+Review both `advisories` and executable `findings`. Fix structural findings and
+any failing precondition that exposes a genuinely missing capability; an
+acceptance check that fails because the work is not yet implemented is expected.
+Do not invent content to silence a finding, and do not author whole-file exact
+grep occurrence counts as dependency checks. Prefer behavioral, AST/schema-aware,
+or declaration-scoped checks.
+
 **Phase 2 — build:** thread the plan phase's `scenarios` array through so the detector doesn't re-run:
 ```
 Workflow({ scriptPath: FORGE_WF, args: { phase: 'build', planPath, workspaceRoot, scenarios: <plan result .scenarios> } })
@@ -183,7 +195,7 @@ Mirror single-plan §2, but persist between phases and report id-prefixed. For t
 - After recording results, **merge** warnings, don't overwrite: `result.warnings = (result.warnings // []) + <this phase's warnings>`.
 
 - **Launch plan:** set `I.status=running, I.phaseReached=plan`, launch `Workflow({scriptPath: FORGE_WF, args:{phase:'plan', planPath:I.planPath, workspaceRoot}})`, record the returned task id into `I.taskId`, persist. Stop (await notification).
-- **On plan done:** record `result.planRounds/planConverged` **and `result.scenarios`** (the detected-scenario array). If the notification status was `failed` (threw) → §Q4 retry/fail. Else post `📋 [I.id] Plan: …`, **launch build** passing `scenarios: I.result.scenarios` (set `phaseReached=build`, new `taskId`), persist, stop.
+- **On plan done:** record `result.planRounds/planConverged` **and `result.scenarios`** (the detected-scenario array). If the notification status was `failed` (threw) → §Q4 retry/fail. Otherwise run `cd <workspaceRoot>/.forge/codex && PYTHONPATH=. python3 -m forge_codex.cli checklist-advise <absolute-checklist-path> --execute --json`; review advisories and findings as in single-plan §2, correcting the checklist before continuing. Do not use whole-file exact grep occurrence counts as dependency checks. Then post `📋 [I.id] Plan: …`, **launch build** passing `scenarios: I.result.scenarios` (set `phaseReached=build`, new `taskId`), persist, stop.
 - **On build done:** record `result.checklistItems/repos/implemented`. If `status:'no-op'` → mark `I.status=done` with a "nothing to implement" note, then §Q2 pick next. If notification `failed` → §Q4. Else post `🔨 [I.id] Build: …`, **launch ship** passing `implemented: I.result.implemented` **and `scenarios: I.result.scenarios`** (set `phaseReached=ship`, new `taskId`), persist, stop.
 - **On ship done:** record `result.shipped/codeRoundsByRepo`, append any `warnings`. **If ship hard-failed (notification `failed`) → do NOT retry ship** (double-commit/push risk): mark `I.status=failed`, `failure={phase:'ship', …}`, §Q4 block dependents, post `❌ [I.id] ship failed — halting for a human`, **STOP the drain**. Else mark `I.status=done`, post the per-item verdict, then §Q2 pick next.
 

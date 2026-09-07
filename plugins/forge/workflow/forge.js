@@ -7,7 +7,7 @@ export const meta = {
     { title: 'Checklist', detail: 'turn the converged plan into an ordered, per-repo, verifiable checklist' },
     { title: 'Implement', detail: 'one implementer per repo (repos parallel, items sequential), build/test gate with a fix loop' },
     { title: 'Refine Code', detail: 'material-driven loop ≤3 rounds per repo: 4 lenses (correctness/delight/refactor/security) + backstop critic' },
-    { title: 'Ship', detail: 'per changed repo: commit, push, discover the deploy path at runtime, deploy' },
+    { title: 'Ship', detail: 'per changed repo: commit, push, verify exact-commit required CI, discover the deploy path, deploy' },
   ],
 }
 
@@ -448,6 +448,9 @@ async function runBuildPhase(scenariosOverride) {
   phase('Checklist')
   const checklist = await agent(
     `Read the converged plan at ${planPath}. Produce an ordered, atomic, verifiable implementation checklist. ` +
+    `Do not use whole-file exact grep occurrence counts as dependency or readiness checks; prefer behavioral, AST/schema-aware, ` +
+    `or declaration-scoped checks. When required CI owns the full regression/lint/type-check gate, make exact-commit required-CI ` +
+    `verification the shipping criterion instead of requiring the same full suite locally. ` +
     `Each item must name the absolute repo path it changes (under ${workspaceRoot}), the files, the change, and a concrete testable acceptance criterion. ` +
     `Order items so dependencies come first. Also write a human-readable copy next to the plan as checklist.md.`,
     { label: 'checklist', phase: 'Checklist', schema: CHECKLIST, model: 'sonnet' },
@@ -469,16 +472,18 @@ async function runBuildPhase(scenariosOverride) {
 
     let result = await agent(
       `Implement these checklist items IN ORDER in the repo at ${repo}. Do not rush; complete every item fully. ` +
-      `Follow the plan at ${planPath} and the diffs in it. After implementing, build and run the repo's tests/linters ` +
-      `(discover how from the repo itself) and report whether they pass.${specialistHints(scenarios)}\n\nITEMS:\n${list}`,
+      `Follow the plan at ${planPath} and the diffs in it. After implementing, build and run focused tests/linters for the changed behavior ` +
+      `(discover how from the repo itself) and report whether they pass. If required CI owns the full regression/lint/type-check gate, ` +
+      `do not duplicate that full gate locally; record the focused commands so ship can verify required CI for the exact commit. ` +
+      `If required CI does not cover a gate, run it locally.${specialistHints(scenarios)}\n\nITEMS:\n${list}`,
       { label: `impl:${repo.split('/').pop()}`, phase: 'Implement', schema: IMPLEMENT_RESULT },
     )
     let fixAttempt = 0
     while (result && !result.testsPassed && fixAttempt < 2) {
       fixAttempt++
       result = await agent(
-        `Tests/build are failing in ${repo}. Diagnose and FIX so the build and tests pass. Do not weaken or skip tests to pass. ` +
-        `Prior failure notes:\n${result.failureNotes}\n\nRe-run the build/tests and report.`,
+        `Focused tests/build are failing in ${repo}. Diagnose and FIX the affected behavior. Do not weaken or skip tests to pass. ` +
+        `Prior failure notes:\n${result.failureNotes}\n\nRe-run the focused failing checks and report. If required CI owns the full gate, do not duplicate it locally.`,
         { label: `impl-fix:${repo.split('/').pop()}#${fixAttempt}`, phase: 'Implement', schema: IMPLEMENT_RESULT },
       )
     }
@@ -555,7 +560,8 @@ async function runShipPhase(implementedInput, scenariosOverride) {
       const allFindings = material.flatMap((d) => d.findings)
       if (allFindings.length) {
         const applied = await agent(
-          `You are the code APPLIER for ${repo}. Apply these MATERIAL review findings to the files, then re-run the build/tests. ` +
+          `You are the code APPLIER for ${repo}. Apply these MATERIAL review findings to the files, then re-run focused tests for the affected behavior. ` +
+          `If required CI owns the full regression/lint/type-check gate, do not duplicate that full gate locally. ` +
           `Apply edits carefully and serially; do not break the build. Do not weaken tests.\n\n` +
           `Then return a 3-5 line CHANGELOG of what you materially changed and where, for the next round's lenses.\n\n` +
           `FINDINGS (JSON):\n${JSON.stringify(allFindings, null, 2)}`,
@@ -605,7 +611,10 @@ async function runShipPhase(implementedInput, scenariosOverride) {
       `1. Verify there are real uncommitted/unpushed changes (git status). If none, skip and report committed=false with a note.\n` +
       `2. Stage and commit with a clear message summarizing the change. Follow the repo's own commit conventions and honor any commit-msg hook. Do NOT append a Co-Authored-By or other Claude/Anthropic attribution trailer unless the repo's recent history already uses one.\n` +
       `3. Push to the appropriate remote/branch.\n` +
-      `4. DISCOVER this repo's deploy path from the repo itself — deploy script, Makefile target, CI workflow, fastlane, ` +
+      `4. If required CI owns the full regression/lint/type-check gate, wait for and verify every required job for the exact pushed commit. ` +
+      `   Record the commit SHA, workflow run ID, and required job results. Do not rerun the same full suite locally; run only uncovered checks. ` +
+      `   Any code change invalidates prior CI evidence and requires CI for the new commit.\n` +
+      `5. DISCOVER this repo's deploy path from the repo itself — deploy script, Makefile target, CI workflow, fastlane, ` +
       `   a fleet/deploy-config catalog flow, package publish, or (for an iOS/Android app) device install + TestFlight / Android Firefly. ` +
       `   Do NOT assume a method; detect it. Then execute the deploy. If the repo has no deploy path, report deployed=false with why.\n` +
       `Report exactly what you did.`,
